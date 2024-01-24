@@ -1,9 +1,62 @@
 import requests.exceptions
 import telebot
 from telebot import types
-
+import mysql.connector
+from mysql.connector import errorcode
 TOKEN = '6746321824:AAGv0cFhzwdwmb5gFtz66LFVyJSJkqe3Gfw'
 bot = telebot.TeleBot(TOKEN)
+
+
+def connectToBD():
+    config = {
+        'user': 'admin',
+        'password': 'Consensus2023*',
+        'host': '200.122.249.98',
+        'database': 'TelegramBot1',
+        'raise_on_warnings': True
+    }
+    try:
+        connection = mysql.connector.connect(**config)
+        cursor = connection.cursor()
+        return connection, cursor
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Usuario o password incorrecto")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("La base de datos no existe")
+        else:
+            print(err)
+
+def validar_existencia_group(groupId):
+    try:
+        data = []
+        connection, cursor = connectToBD()
+        sql = 'SELECT * FROM `TelegramBot1`.`grupos` WHERE id_telegram = %s;'
+        value = groupId
+        cursor.execute(sql,(value,))
+        results = cursor.fetchall()
+        for row in results:
+            data.append([row[0],row[1],row[2],row[3]])
+        leng = len(data)
+        if leng > 0:
+            return 1
+        else:
+            return 0
+    except Exception as e:
+        print(f"Ha ocurrido un error {e}")
+        return 0
+
+def insert_group(id_group,name_group):
+    try:
+        connection, cursor = connectToBD()
+        sql = 'INSERT INTO `TelegramBot1`.`grupos` (id_telegram, nombre_grupo) VALUES (%s, %s)'
+        values = (id_group, name_group)
+        cursor.execute(sql,values)
+        connection.commit()
+        return 1
+    except Exception as e:
+        print(f"Ha ocurrido un error {e}")
+        return 0
 
 @bot.message_handler(commands=['empezar'])
 def sendWelcomeMessage(message):
@@ -16,8 +69,15 @@ def infomationBot(message):
 
 @bot.message_handler(commands=['vincular'])
 def vinculation(message):
-    bot.reply_to(message, 'Vinculado con exito')
-    print(message.chat)
+    if message.chat.type == 'supergroup':
+        result = validar_existencia_group(str(message.chat.id))
+        if result == 1:
+            bot.reply_to(message, 'No es posible vincular el bot a este grupo porque ya se encuentra vinculado')
+        else:
+            insert_group(message.chat.id, message.chat.title)
+            bot.reply_to(message, 'Vinculado con exito')
+    else:
+        bot.reply_to(message, 'Este comando es exclusivo para grupos y no para usuarios.')
 
 ##Enviar mensajes a un grupo en especifico usando el nombre del grupo como identificador.
 # @bot.message_handler(commands=['buenosDias'])
