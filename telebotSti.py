@@ -1,5 +1,6 @@
 import requests.exceptions
 import telebot
+import datetime
 from telebot import types
 import mysql.connector
 from mysql.connector import errorcode
@@ -27,16 +28,21 @@ def connectToBD():
         else:
             print(err)
 
+def cerrar_conexion(connection, cursor):
+    cursor.close()
+    connection.close()
+
+
 def validar_existencia_group(groupId):
     try:
         data = []
         connection, cursor = connectToBD()
         sql = 'SELECT * FROM `TelegramBot1`.`grupos` WHERE id_telegram = %s;'
         value = groupId
-        cursor.execute(sql,(value,))
+        cursor.execute(sql, (value,))
         results = cursor.fetchall()
         for row in results:
-            data.append([row[0],row[1],row[2],row[3]])
+            data.append([row[0], row[1], row[2], row[3]])
         leng = len(data)
         if leng > 0:
             return 1
@@ -45,65 +51,64 @@ def validar_existencia_group(groupId):
     except Exception as e:
         print(f"Ha ocurrido un error {e}")
         return 0
+    finally:
+        cerrar_conexion(connection, cursor)
 
-def insert_group(id_group,name_group):
+
+def insert_group(id_group, name_group):
     try:
         connection, cursor = connectToBD()
         sql = 'INSERT INTO `TelegramBot1`.`grupos` (id_telegram, nombre_grupo) VALUES (%s, %s)'
         values = (id_group, name_group)
-        cursor.execute(sql,values)
+        cursor.execute(sql, values)
         connection.commit()
         return 1
     except Exception as e:
         print(f"Ha ocurrido un error {e}")
         return 0
+    finally:
+        cerrar_conexion(connection, cursor)
 
-@bot.message_handler(commands=['empezar'])
-def sendWelcomeMessage(message):
-    bot.reply_to(message, 'Bienvenido al Bot STI')
+def insert_group_logs(usuario, id_grupo_telegram):
+    try:
+        connection, cursor = connectToBD()
+        dateTime =datetime.datetime.now()
+        accion = "Asociacion de grupo de telegram"
+        sql = 'INSERT INTO `TelegramBot1`.`grupos_logs` (usuario, dateTime, accion, id_grupo_telegram) VALUES (%s, %s,%s,%s)'
+        values = (usuario, dateTime, accion, id_grupo_telegram)
+        cursor.execute(sql, values)
+        connection.commit()
+        return  1
+    except Exception as e:
+        print(f"Ha ocurrido un error {e}")
+        return 0
+    finally:
+        cerrar_conexion(connection, cursor)
 
-@bot.message_handler(commands=['info'])
-def infomationBot(message):
-    bot.reply_to(message, 'Este es un bot creado para el envio masivo de mensajes')
-    print(message.chat)
+# @bot.message_handler(commands=['empezar'])
+# def sendWelcomeMessage(message):
+#     bot.reply_to(message, 'Bienvenido al Bot STI')
+#
+# @bot.message_handler(commands=['info'])
+# def infomationBot(message):
+#     bot.reply_to(message, 'Este es un bot creado para el envio masivo de mensajes')
+#     print(message.chat)
 
-@bot.message_handler(commands=['vincular'])
+@bot.message_handler(commands=['vincular_sti'])
 def vinculation(message):
-    if message.chat.type == 'supergroup':
+    if message.chat.type == 'supergroup' or message.chat.type == 'group':
         result = validar_existencia_group(str(message.chat.id))
         if result == 1:
             bot.reply_to(message, 'No es posible vincular el bot a este grupo porque ya se encuentra vinculado')
         else:
-            insert_group(message.chat.id, message.chat.title)
-            bot.reply_to(message, 'Vinculado con exito')
+            insert = insert_group(message.chat.id, message.chat.title)
+            if insert == 1:
+                username = message.from_user.first_name + " " + message.from_user.last_name
+                insert_group_logs(username, message.chat.id)
+                bot.reply_to(message, 'Vinculado con exito')
+
     else:
         bot.reply_to(message, 'Este comando es exclusivo para grupos y no para usuarios.')
-
-##Enviar mensajes a un grupo en especifico usando el nombre del grupo como identificador.
-# @bot.message_handler(commands=['buenosDias'])
-# def buenosDiasGrupo(message):
-#     if message.chat.title == 'PruebaBot':
-#         bot.reply_to(message, f"Este es un mensaje personalizado para el grupo {message.chat.title}")
-#     else:
-#         bot.reply_to(message, 'No es posible dar informacion en este grupo')
-#     print(message.chat)
-
-
-@bot.message_handler(commands=['saludar'])
-def get_chat_id(message):
-    chat_id = message.chat.id
-    print(chat_id)
-    # bot.send_message(chat_id, f"El ID del grupo es: {chat_id}")
-    bot.send_message(message,"hola")
-
-# ID_DEL_GRUPO = -1001977588535
-# @bot.message_handler(commands=['enviar_grupo'])
-# def enviar_mensaje_al_grupo(message):
-#     mensaje = "¡Hola, este es un mensaje de ejemplo para el grupo!"
-#     bot.send_message(ID_DEL_GRUPO, mensaje)
-
-
-
 
 if __name__ == "__main__":
     try:
